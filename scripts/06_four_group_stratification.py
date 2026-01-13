@@ -237,26 +237,22 @@ def main():
     print("FOUR-GROUP GDF15 STRATIFICATION ANALYSIS")
     print("=" * 70)
 
-    # Load data
+    # Load proteomics data
     cosinr = pd.read_csv(DATA_DIR / "regression_ml_inputs.csv")
 
-    # Identify survival columns (adjust as needed)
-    time_col = None
-    event_col = None
+    # Load survival data from Nature Cancer supplement
+    xls = pd.ExcelFile(DATA_DIR / "43018_2022_467_MOESM2_ESM.xlsx")
+    clinical = pd.read_excel(xls, sheet_name='Supplementary Table 1', header=1)
 
-    for col in cosinr.columns:
-        if 'os_time' in col.lower() or 'survival_time' in col.lower():
-            time_col = col
-        if 'os_status' in col.lower() or 'os_event' in col.lower():
-            event_col = col
+    # Merge survival data with proteomics
+    clinical_surv = clinical[['Study_ID', 'OS_Months', 'Death_Event']].copy()
+    clinical_surv.columns = ['id', 'OS_time', 'OS_event']
+    cosinr = pd.merge(cosinr, clinical_surv, on='id', how='left')
 
-    if time_col is None or event_col is None:
-        print("\nWARNING: Survival columns not found. Creating dummy data for demonstration.")
-        np.random.seed(42)
-        cosinr['OS_time'] = np.random.exponential(24, len(cosinr))
-        cosinr['OS_event'] = np.random.binomial(1, 0.4, len(cosinr))
-        time_col = 'OS_time'
-        event_col = 'OS_event'
+    time_col = 'OS_time'
+    event_col = 'OS_event'
+
+    print(f"Patients with survival data: {cosinr[time_col].notna().sum()}")
 
     # Create 4 groups
     df, group_labels = create_four_groups(cosinr, time_col, event_col)

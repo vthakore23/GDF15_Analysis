@@ -291,35 +291,23 @@ def main():
     print("GDF15 SURVIVAL ANALYSIS")
     print("=" * 70)
 
-    # Load data
+    # Load proteomics data
     cosinr = pd.read_csv(DATA_DIR / "regression_ml_inputs.csv")
 
-    # Identify survival columns
-    # You may need to adjust these column names based on actual data
-    time_col = None
-    event_col = None
+    # Load survival data from Nature Cancer supplement
+    xls = pd.ExcelFile(DATA_DIR / "43018_2022_467_MOESM2_ESM.xlsx")
+    clinical = pd.read_excel(xls, sheet_name='Supplementary Table 1', header=1)
 
-    # Search for survival columns
-    for col in cosinr.columns:
-        if 'os_time' in col.lower() or 'survival_time' in col.lower():
-            time_col = col
-        if 'os_status' in col.lower() or 'os_event' in col.lower() or 'death' in col.lower():
-            event_col = col
+    # Merge survival data with proteomics
+    # Match on Study_ID to id
+    clinical_surv = clinical[['Study_ID', 'OS_Months', 'Death_Event']].copy()
+    clinical_surv.columns = ['id', 'OS_time', 'OS_event']
+    cosinr = pd.merge(cosinr, clinical_surv, on='id', how='left')
 
-    if time_col is None or event_col is None:
-        print("\nWARNING: Could not automatically identify survival columns.")
-        print("Available columns containing 'os', 'surv', 'time', 'status', 'event':")
-        relevant_cols = [c for c in cosinr.columns if any(x in c.lower() for x in ['os', 'surv', 'time', 'status', 'event', 'death'])]
-        print(relevant_cols[:20])
-        print("\nPlease manually specify time_col and event_col in the script.")
+    time_col = 'OS_time'
+    event_col = 'OS_event'
 
-        # For demonstration, create dummy survival data
-        print("\nCreating dummy survival data for demonstration...")
-        np.random.seed(42)
-        cosinr['OS_time'] = np.random.exponential(24, len(cosinr))
-        cosinr['OS_event'] = np.random.binomial(1, 0.4, len(cosinr))
-        time_col = 'OS_time'
-        event_col = 'OS_event'
+    print(f"Patients with survival data: {cosinr[time_col].notna().sum()}")
 
     results = []
 
