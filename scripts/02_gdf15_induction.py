@@ -240,7 +240,7 @@ def main():
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
-    print("\nGDF15 is significantly induced by SBRT in both cohorts:")
+    print("\nGDF15 induction results:")
     print(f"  COSINR (SBRT+ICB): p = {cosinr_results['p_value']:.2e}, Cohen's d = {cosinr_results['cohens_d']:.2f}")
     print(f"  Early-stage (SBRT alone): p = {early_results['p_value']:.2e}, Cohen's d = {early_results['cohens_d']:.2f}")
 

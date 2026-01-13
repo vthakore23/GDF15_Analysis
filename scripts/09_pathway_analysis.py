@@ -4,12 +4,10 @@
 ======================
 Analyze correlations between GDF15 and ssGSEA pathway enrichment scores.
 
-Key Claims Verified:
-- GDF15 change correlates with decreased IFN-stimulated genes (ρ=-0.39)
-- GDF15 change correlates with decreased TCR signaling (ρ=-0.38)
-- GDF15 change correlates with decreased MHC Class I processing (ρ=-0.56)
-- GDF15 change correlates with increased IL-4/IL-13 signaling (ρ=+0.42)
-- GDF15 change correlates with increased IL-10 signaling (ρ=+0.56)
+Analyses:
+1. GDF15 change vs pathway score changes
+2. Baseline GDF15 vs baseline pathway scores
+3. Comprehensive analysis of all Hallmark pathways
 """
 
 import pandas as pd
