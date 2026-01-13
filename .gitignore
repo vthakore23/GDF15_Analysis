@@ -1,0 +1,39 @@
+# Data files (too large / confidential)
+*.parquet
+*.xlsx
+*.csv
+!results/*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pickle files (intermediate data)
+*.pkl
+
+# Keep results and figures directories but not their contents
+results/*
+!results/.gitkeep
+figures/*
+!figures/.gitkeep
