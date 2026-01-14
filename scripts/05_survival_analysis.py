@@ -94,7 +94,7 @@ def univariate_cox_baseline(cosinr, time_col, event_col):
 
 
 def univariate_cox_change(cosinr, time_col, event_col):
-    """Univariate Cox regression for GDF15 change."""
+    """Univariate Cox regression for GDF15 change (dichotomized)."""
     print("\n" + "=" * 70)
     print("UNIVARIATE COX REGRESSION: GDF15 CHANGE")
     print("=" * 70)
@@ -105,26 +105,28 @@ def univariate_cox_change(cosinr, time_col, event_col):
     df = df[['GDF15_change', time_col, event_col]].copy()
     df.columns = ['GDF15_change', 'time', 'event']
 
-    # Standardize
-    df['GDF15_change_std'] = (df['GDF15_change'] - df['GDF15_change'].mean()) / df['GDF15_change'].std()
+    # Dichotomize: increased vs decreased
+    df['GDF15_increased'] = (df['GDF15_change'] > 0).astype(int)
 
     print(f"\nSample size: n = {len(df)}")
+    print(f"  GDF15 increased: {df['GDF15_increased'].sum()}")
+    print(f"  GDF15 decreased: {(1-df['GDF15_increased']).sum()}")
 
-    # Fit Cox model
+    # Fit Cox model with dichotomized variable
     cph = CoxPHFitter()
-    cph.fit(df[['GDF15_change_std', 'time', 'event']], duration_col='time', event_col='event')
+    cph.fit(df[['GDF15_increased', 'time', 'event']], duration_col='time', event_col='event')
 
-    hr = np.exp(cph.params_['GDF15_change_std'])
-    ci_lower = np.exp(cph.confidence_intervals_.loc['GDF15_change_std', '95% lower-bound'])
-    ci_upper = np.exp(cph.confidence_intervals_.loc['GDF15_change_std', '95% upper-bound'])
-    p_value = cph.summary.loc['GDF15_change_std', 'p']
+    hr = np.exp(cph.params_['GDF15_increased'])
+    ci_lower = np.exp(cph.confidence_intervals_.loc['GDF15_increased', '95% lower-bound'])
+    ci_upper = np.exp(cph.confidence_intervals_.loc['GDF15_increased', '95% upper-bound'])
+    p_value = cph.summary.loc['GDF15_increased', 'p']
 
-    print(f"\nResults (per 1 SD increase in GDF15 change):")
+    print(f"\nResults (increased vs decreased GDF15):")
     print(f"  HR = {hr:.2f} (95% CI: {ci_lower:.2f} - {ci_upper:.2f})")
     print(f"  p-value = {p_value:.4f}")
 
     return {
-        'analysis': 'GDF15 Change (univariate)',
+        'analysis': 'GDF15 Change (increased vs decreased)',
         'n': len(df),
         'HR': hr,
         'CI_lower': ci_lower,
@@ -291,21 +293,12 @@ def main():
     print("GDF15 SURVIVAL ANALYSIS")
     print("=" * 70)
 
-    # Load proteomics data
+    # Load data - survival columns are already in the main CSV
     cosinr = pd.read_csv(DATA_DIR / "regression_ml_inputs.csv")
 
-    # Load survival data from Nature Cancer supplement
-    xls = pd.ExcelFile(DATA_DIR / "43018_2022_467_MOESM2_ESM.xlsx")
-    clinical = pd.read_excel(xls, sheet_name='Supplementary Table 1', header=1)
-
-    # Merge survival data with proteomics
-    # Match on Study_ID to id
-    clinical_surv = clinical[['Study_ID', 'OS_Months', 'Death_Event']].copy()
-    clinical_surv.columns = ['id', 'OS_time', 'OS_event']
-    cosinr = pd.merge(cosinr, clinical_surv, on='id', how='left')
-
-    time_col = 'OS_time'
-    event_col = 'OS_event'
+    # Use the existing survival columns
+    time_col = 'os_time'
+    event_col = 'event_death'
 
     print(f"Patients with survival data: {cosinr[time_col].notna().sum()}")
 

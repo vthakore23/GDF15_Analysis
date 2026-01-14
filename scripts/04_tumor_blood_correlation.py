@@ -5,9 +5,9 @@
 Analyze correlations between tumor GDF15 expression and circulating GDF15 levels.
 
 Analyses:
-1. Baseline correlation (tumor RNA vs T1 blood)
-2. On-treatment correlation (tumor RNA vs T3 blood)
-3. Change correlation (delta tumor vs delta blood)
+1. PRE tumor vs T1 blood (baseline correlation)
+2. POST tumor vs T3 blood (on-treatment correlation)
+3. Tumor change vs blood change correlation
 """
 
 import pandas as pd
@@ -26,136 +26,168 @@ FIGURES_DIR = BASE_DIR / "GDF15_Analysis" / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def load_tumor_gdf15():
-    """Load tumor GDF15 expression from RNA-seq."""
+def load_tumor_gdf15_by_timepoint():
+    """Load tumor GDF15 expression from RNA-seq with PRE/POST timepoint separation."""
     xls = pd.ExcelFile(DATA_DIR / "43018_2022_467_MOESM2_ESM.xlsx")
-    tumor_rna = pd.read_excel(xls, sheet_name='Supplementary Table 8', header=1)
 
+    # Load sample metadata to get PRE/POST designation
+    sample_meta = pd.read_excel(xls, sheet_name='Supplementary Table 2', header=1)
+    sample_meta = sample_meta[['Study_ID', 'Sample_ID', 'Timepoint']].copy()
+
+    # Load tumor RNA-seq data
+    tumor_rna = pd.read_excel(xls, sheet_name='Supplementary Table 8', header=1)
     sample_cols = [c for c in tumor_rna.columns if c.startswith('SP_')]
 
     # Get GDF15 row
     gdf15_row = tumor_rna[tumor_rna['Gene ID'] == 'ENSG00000130513']
-    gdf15_expr = gdf15_row[sample_cols].iloc[0]
 
-    # Create dataframe
-    patient_ids = [int(c.replace('SP_', '')) for c in sample_cols]
-    tumor_gdf15 = pd.DataFrame({
-        'id': patient_ids,
-        'tumor_GDF15': gdf15_expr.values
-    })
+    if len(gdf15_row) == 0:
+        print("Warning: GDF15 not found in tumor RNA-seq data")
+        return pd.DataFrame()
 
-    return tumor_gdf15
+    # Create long-format dataframe with sample IDs
+    tumor_data = []
+    for col in sample_cols:
+        tumor_data.append({
+            'Sample_ID': col,
+            'tumor_GDF15': gdf15_row[col].values[0]
+        })
+    tumor_df = pd.DataFrame(tumor_data)
+
+    # Merge with sample metadata to get Study_ID and Timepoint
+    tumor_df = pd.merge(tumor_df, sample_meta, on='Sample_ID', how='left')
+
+    # Pivot to get PRE and POST columns per patient
+    tumor_wide = tumor_df.pivot(index='Study_ID', columns='Timepoint', values='tumor_GDF15').reset_index()
+    tumor_wide.columns = ['id', 'POST_tumor_GDF15', 'PRE_tumor_GDF15']
+
+    # Reorder columns
+    tumor_wide = tumor_wide[['id', 'PRE_tumor_GDF15', 'POST_tumor_GDF15']]
+
+    return tumor_wide
 
 
 def analyze_correlations():
-    """Analyze tumor-blood GDF15 correlations at different timepoints."""
+    """Analyze tumor-blood GDF15 correlations with proper PRE/POST matching."""
     print("=" * 70)
     print("TUMOR-BLOOD GDF15 CORRELATION ANALYSIS")
     print("=" * 70)
 
     # Load data
     cosinr = pd.read_csv(DATA_DIR / "regression_ml_inputs.csv")
-    tumor_gdf15 = load_tumor_gdf15()
+    tumor_gdf15 = load_tumor_gdf15_by_timepoint()
+
+    if tumor_gdf15.empty:
+        print("No tumor data available")
+        return pd.DataFrame(), pd.DataFrame()
 
     # Merge
     merged = pd.merge(cosinr, tumor_gdf15, on='id', how='inner')
     print(f"\nPatients with tumor RNA-seq data: {len(merged)}")
+    print(f"Patients with PRE tumor samples: {merged['PRE_tumor_GDF15'].notna().sum()}")
+    print(f"Patients with POST tumor samples: {merged['POST_tumor_GDF15'].notna().sum()}")
 
     results = []
 
-    # 1. Baseline correlation (tumor vs T1 blood)
+    # 1. PRE tumor vs T1 blood (baseline correlation)
     print("\n" + "-" * 50)
-    print("1. BASELINE CORRELATION (Tumor RNA vs T1 Blood)")
+    print("1. BASELINE CORRELATION (PRE Tumor vs T1 Blood)")
     print("-" * 50)
 
-    mask_t1 = merged['p.GDF15.T1'].notna() & merged['tumor_GDF15'].notna()
-    n_t1 = mask_t1.sum()
+    mask_pre = merged['p.GDF15.T1'].notna() & merged['PRE_tumor_GDF15'].notna()
+    n_pre = mask_pre.sum()
 
-    if n_t1 > 5:
-        rho_t1, p_t1 = stats.spearmanr(
-            merged.loc[mask_t1, 'tumor_GDF15'],
-            merged.loc[mask_t1, 'p.GDF15.T1']
+    if n_pre >= 5:
+        rho_pre, p_pre = stats.spearmanr(
+            merged.loc[mask_pre, 'PRE_tumor_GDF15'],
+            merged.loc[mask_pre, 'p.GDF15.T1']
         )
-        print(f"  n = {n_t1}")
-        print(f"  Spearman ρ = {rho_t1:.2f}")
-        print(f"  p-value = {p_t1:.4f}")
+        print(f"  n = {n_pre}")
+        print(f"  Spearman rho = {rho_pre:.2f}")
+        print(f"  p-value = {p_pre:.4f}")
 
         results.append({
-            'timepoint': 'Baseline',
-            'n': n_t1,
-            'spearman_rho': rho_t1,
-            'p_value': p_t1
+            'comparison': 'PRE tumor vs T1 blood',
+            'n': n_pre,
+            'spearman_rho': rho_pre,
+            'p_value': p_pre
         })
+    else:
+        print(f"  Insufficient samples (n={n_pre})")
 
-    # 2. On-treatment correlation (tumor vs T3 blood)
+    # 2. POST tumor vs T3 blood (on-treatment correlation)
     print("\n" + "-" * 50)
-    print("2. ON-TREATMENT CORRELATION (Tumor RNA vs T3 Blood)")
+    print("2. ON-TREATMENT CORRELATION (POST Tumor vs T3 Blood)")
     print("-" * 50)
 
-    mask_t3 = merged['p.GDF15.T3'].notna() & merged['tumor_GDF15'].notna()
-    n_t3 = mask_t3.sum()
+    mask_post = merged['p.GDF15.T3'].notna() & merged['POST_tumor_GDF15'].notna()
+    n_post = mask_post.sum()
 
-    if n_t3 > 5:
-        rho_t3, p_t3 = stats.spearmanr(
-            merged.loc[mask_t3, 'tumor_GDF15'],
-            merged.loc[mask_t3, 'p.GDF15.T3']
+    if n_post >= 5:
+        rho_post, p_post = stats.spearmanr(
+            merged.loc[mask_post, 'POST_tumor_GDF15'],
+            merged.loc[mask_post, 'p.GDF15.T3']
         )
-        print(f"  n = {n_t3}")
-        print(f"  Spearman ρ = {rho_t3:.2f}")
-        print(f"  p-value = {p_t3:.4f}")
+        print(f"  n = {n_post}")
+        print(f"  Spearman rho = {rho_post:.2f}")
+        print(f"  p-value = {p_post:.4f}")
 
         results.append({
-            'timepoint': 'On-treatment',
-            'n': n_t3,
-            'spearman_rho': rho_t3,
-            'p_value': p_t3
+            'comparison': 'POST tumor vs T3 blood',
+            'n': n_post,
+            'spearman_rho': rho_post,
+            'p_value': p_post
         })
+    else:
+        print(f"  Insufficient samples (n={n_post})")
 
-    # 3. Change correlation
+    # 3. Change correlation (tumor log2FC vs blood NPX change)
+    # Note: Blood NPX is already on log2 scale, so NPX change = log2 fold change
+    # Tumor FPKM is on linear scale, so we use log2(POST/PRE) for comparability
     print("\n" + "-" * 50)
-    print("3. CHANGE CORRELATION (Delta Tumor vs Delta Blood)")
+    print("3. CHANGE CORRELATION (Tumor log2FC vs Blood NPX Change)")
     print("-" * 50)
-
-    # For change, we need patients with both T1 and T3 blood AND tumor data
-    # Note: The tumor data is from a single timepoint, so "change" analysis
-    # typically uses blood change vs tumor expression level
 
     mask_change = (merged['p.GDF15.T1'].notna() &
                    merged['p.GDF15.T3'].notna() &
-                   merged['tumor_GDF15'].notna())
+                   merged['PRE_tumor_GDF15'].notna() &
+                   merged['POST_tumor_GDF15'].notna())
     n_change = mask_change.sum()
 
-    if n_change > 5:
+    if n_change >= 5:
+        # Blood change in NPX (already log2 scale)
         blood_change = merged.loc[mask_change, 'p.GDF15.T3'] - merged.loc[mask_change, 'p.GDF15.T1']
+        # Tumor log2 fold change (convert linear FPKM to log2 scale)
+        tumor_log2fc = np.log2(merged.loc[mask_change, 'POST_tumor_GDF15'] /
+                               merged.loc[mask_change, 'PRE_tumor_GDF15'])
 
-        rho_change, p_change = stats.spearmanr(
-            merged.loc[mask_change, 'tumor_GDF15'],
-            blood_change
-        )
+        rho_change, p_change = stats.spearmanr(tumor_log2fc, blood_change)
         print(f"  n = {n_change}")
-        print(f"  Spearman ρ = {rho_change:.2f}")
+        print(f"  Spearman rho = {rho_change:.2f}")
         print(f"  p-value = {p_change:.4f}")
 
         results.append({
-            'timepoint': 'Change',
+            'comparison': 'Tumor log2FC vs blood NPX change',
             'n': n_change,
             'spearman_rho': rho_change,
             'p_value': p_change
         })
+    else:
+        print(f"  Insufficient samples (n={n_change})")
 
     return pd.DataFrame(results), merged
 
 
 def create_correlation_figure(merged):
-    """Create correlation scatter plots."""
+    """Create correlation scatter plots with proper PRE/POST matching."""
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-    # 1. Baseline
+    # 1. PRE tumor vs T1 blood (baseline)
     ax1 = axes[0]
-    mask_t1 = merged['p.GDF15.T1'].notna() & merged['tumor_GDF15'].notna()
-    if mask_t1.sum() > 0:
-        x = merged.loc[mask_t1, 'tumor_GDF15']
-        y = merged.loc[mask_t1, 'p.GDF15.T1']
+    mask_pre = merged['p.GDF15.T1'].notna() & merged['PRE_tumor_GDF15'].notna()
+    if mask_pre.sum() > 0:
+        x = merged.loc[mask_pre, 'PRE_tumor_GDF15']
+        y = merged.loc[mask_pre, 'p.GDF15.T1']
         ax1.scatter(x, y, alpha=0.7, s=50)
 
         # Add regression line
@@ -164,16 +196,16 @@ def create_correlation_figure(merged):
         ax1.plot(x.sort_values(), p(x.sort_values()), "r--", alpha=0.8)
 
         rho, pval = stats.spearmanr(x, y)
-        ax1.set_xlabel('Tumor GDF15 (FPKM)')
-        ax1.set_ylabel('Blood GDF15 (NPX)')
-        ax1.set_title(f'Baseline\nn={mask_t1.sum()}, ρ={rho:.2f}, p={pval:.3f}')
+        ax1.set_xlabel('PRE Tumor GDF15 (FPKM)')
+        ax1.set_ylabel('T1 Blood GDF15 (NPX)')
+        ax1.set_title(f'Baseline (PRE tumor vs T1 blood)\nn={mask_pre.sum()}, rho={rho:.2f}, p={pval:.3f}')
 
-    # 2. On-treatment
+    # 2. POST tumor vs T3 blood (on-treatment)
     ax2 = axes[1]
-    mask_t3 = merged['p.GDF15.T3'].notna() & merged['tumor_GDF15'].notna()
-    if mask_t3.sum() > 0:
-        x = merged.loc[mask_t3, 'tumor_GDF15']
-        y = merged.loc[mask_t3, 'p.GDF15.T3']
+    mask_post = merged['p.GDF15.T3'].notna() & merged['POST_tumor_GDF15'].notna()
+    if mask_post.sum() > 0:
+        x = merged.loc[mask_post, 'POST_tumor_GDF15']
+        y = merged.loc[mask_post, 'p.GDF15.T3']
         ax2.scatter(x, y, alpha=0.7, s=50, color='green')
 
         z = np.polyfit(x, y, 1)
@@ -181,28 +213,30 @@ def create_correlation_figure(merged):
         ax2.plot(x.sort_values(), p(x.sort_values()), "r--", alpha=0.8)
 
         rho, pval = stats.spearmanr(x, y)
-        ax2.set_xlabel('Tumor GDF15 (FPKM)')
-        ax2.set_ylabel('Blood GDF15 (NPX)')
-        ax2.set_title(f'On-treatment\nn={mask_t3.sum()}, ρ={rho:.2f}, p={pval:.3f}')
+        ax2.set_xlabel('POST Tumor GDF15 (FPKM)')
+        ax2.set_ylabel('T3 Blood GDF15 (NPX)')
+        ax2.set_title(f'On-treatment (POST tumor vs T3 blood)\nn={mask_post.sum()}, rho={rho:.2f}, p={pval:.3f}')
 
-    # 3. Change
+    # 3. Change correlation (tumor log2FC vs blood NPX change)
     ax3 = axes[2]
     mask_change = (merged['p.GDF15.T1'].notna() &
                    merged['p.GDF15.T3'].notna() &
-                   merged['tumor_GDF15'].notna())
+                   merged['PRE_tumor_GDF15'].notna() &
+                   merged['POST_tumor_GDF15'].notna())
     if mask_change.sum() > 0:
-        x = merged.loc[mask_change, 'tumor_GDF15']
-        y = merged.loc[mask_change, 'p.GDF15.T3'] - merged.loc[mask_change, 'p.GDF15.T1']
-        ax3.scatter(x, y, alpha=0.7, s=50, color='purple')
+        tumor_log2fc = np.log2(merged.loc[mask_change, 'POST_tumor_GDF15'] /
+                               merged.loc[mask_change, 'PRE_tumor_GDF15'])
+        blood_change = merged.loc[mask_change, 'p.GDF15.T3'] - merged.loc[mask_change, 'p.GDF15.T1']
+        ax3.scatter(tumor_log2fc, blood_change, alpha=0.7, s=50, color='purple')
 
-        z = np.polyfit(x, y, 1)
+        z = np.polyfit(tumor_log2fc, blood_change, 1)
         p = np.poly1d(z)
-        ax3.plot(x.sort_values(), p(x.sort_values()), "r--", alpha=0.8)
+        ax3.plot(tumor_log2fc.sort_values(), p(tumor_log2fc.sort_values()), "r--", alpha=0.8)
 
-        rho, pval = stats.spearmanr(x, y)
-        ax3.set_xlabel('Tumor GDF15 (FPKM)')
+        rho, pval = stats.spearmanr(tumor_log2fc, blood_change)
+        ax3.set_xlabel('Tumor GDF15 log2FC')
         ax3.set_ylabel('Blood GDF15 Change (NPX)')
-        ax3.set_title(f'Blood Change\nn={mask_change.sum()}, ρ={rho:.2f}, p={pval:.3f}')
+        ax3.set_title(f'Change Correlation\nn={mask_change.sum()}, rho={rho:.2f}, p={pval:.3f}')
 
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / 'tumor_blood_correlation.png', dpi=300, bbox_inches='tight')

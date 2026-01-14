@@ -137,14 +137,75 @@ def cox_four_groups(df):
 
     results = []
 
-    # Compare Group 4 to Group 1 (reference)
-    df_compare = df[df['group'].isin([1, 4])].copy()
-    df_compare['group4'] = (df_compare['group'] == 4).astype(int)
+    # Prepare covariates for all analyses
+    df = df.copy()
+    df['arm_concurrent'] = (df['arm'] == 'Concurrent').astype(int)
+    df['Age_std'] = (df['Age'] - df['Age'].mean()) / df['Age'].std()
 
-    # Univariate
-    print("\n1. UNIVARIATE (Group 4 vs Group 1)")
+    # === Analysis 1: Group 4 vs All Others (Groups 1+2+3) ===
+    # This is the primary analysis reported in the manuscript
+    print("\n1. GROUP 4 vs ALL OTHERS (Primary Analysis)")
     print("-" * 50)
 
+    df['group4_vs_rest'] = (df['group'] == 4).astype(int)
+
+    # Univariate
+    cph = CoxPHFitter()
+    cph.fit(df[['group4_vs_rest', 'time', 'event']], duration_col='time', event_col='event')
+
+    hr = np.exp(cph.params_['group4_vs_rest'])
+    ci_lower = np.exp(cph.confidence_intervals_.loc['group4_vs_rest', '95% lower-bound'])
+    ci_upper = np.exp(cph.confidence_intervals_.loc['group4_vs_rest', '95% upper-bound'])
+    p_value = cph.summary.loc['group4_vs_rest', 'p']
+
+    print(f"  Univariate:")
+    print(f"    n = {len(df)} (Group 4: {df['group4_vs_rest'].sum()}, Others: {(1-df['group4_vs_rest']).sum()})")
+    print(f"    HR = {hr:.2f} (95% CI: {ci_lower:.2f} - {ci_upper:.2f})")
+    print(f"    p-value = {p_value:.4f}")
+
+    results.append({
+        'model': 'Univariate',
+        'comparison': 'Group 4 vs All Others',
+        'n': len(df),
+        'HR': hr,
+        'CI_lower': ci_lower,
+        'CI_upper': ci_upper,
+        'p_value': p_value
+    })
+
+    # Multivariable (adjusted for age and treatment arm)
+    cph_multi = CoxPHFitter()
+    cph_multi.fit(df[['group4_vs_rest', 'Age_std', 'arm_concurrent', 'time', 'event']],
+                  duration_col='time', event_col='event')
+
+    hr_adj = np.exp(cph_multi.params_['group4_vs_rest'])
+    ci_lower_adj = np.exp(cph_multi.confidence_intervals_.loc['group4_vs_rest', '95% lower-bound'])
+    ci_upper_adj = np.exp(cph_multi.confidence_intervals_.loc['group4_vs_rest', '95% upper-bound'])
+    p_value_adj = cph_multi.summary.loc['group4_vs_rest', 'p']
+
+    print(f"\n  Multivariable (adjusted for age and treatment arm):")
+    print(f"    HR = {hr_adj:.2f} (95% CI: {ci_lower_adj:.2f} - {ci_upper_adj:.2f})")
+    print(f"    p-value = {p_value_adj:.4f}")
+
+    results.append({
+        'model': 'Multivariable',
+        'comparison': 'Group 4 vs All Others',
+        'n': len(df),
+        'HR': hr_adj,
+        'CI_lower': ci_lower_adj,
+        'CI_upper': ci_upper_adj,
+        'p_value': p_value_adj
+    })
+
+    # === Analysis 2: Group 4 vs Group 1 (extreme groups) ===
+    print("\n2. GROUP 4 vs GROUP 1 (Extreme Groups)")
+    print("-" * 50)
+
+    df_compare = df[df['group'].isin([1, 4])].copy()
+    df_compare['group4'] = (df_compare['group'] == 4).astype(int)
+    df_compare['Age_std'] = (df_compare['Age'] - df_compare['Age'].mean()) / df_compare['Age'].std()
+
+    # Univariate
     cph = CoxPHFitter()
     cph.fit(df_compare[['group4', 'time', 'event']], duration_col='time', event_col='event')
 
@@ -153,9 +214,10 @@ def cox_four_groups(df):
     ci_upper = np.exp(cph.confidence_intervals_.loc['group4', '95% upper-bound'])
     p_value = cph.summary.loc['group4', 'p']
 
-    print(f"  n = {len(df_compare)} (Group 1: {(df_compare['group']==1).sum()}, Group 4: {(df_compare['group']==4).sum()})")
-    print(f"  HR = {hr:.2f} (95% CI: {ci_lower:.2f} - {ci_upper:.2f})")
-    print(f"  p-value = {p_value:.4f}")
+    print(f"  Univariate:")
+    print(f"    n = {len(df_compare)} (Group 1: {(df_compare['group']==1).sum()}, Group 4: {(df_compare['group']==4).sum()})")
+    print(f"    HR = {hr:.2f} (95% CI: {ci_lower:.2f} - {ci_upper:.2f})")
+    print(f"    p-value = {p_value:.4f}")
 
     results.append({
         'model': 'Univariate',
@@ -167,13 +229,7 @@ def cox_four_groups(df):
         'p_value': p_value
     })
 
-    # Multivariable (adjusted for age and treatment arm)
-    print("\n2. MULTIVARIABLE (Adjusted for age and treatment arm)")
-    print("-" * 50)
-
-    df_compare['arm_concurrent'] = (df_compare['arm'] == 'Concurrent').astype(int)
-    df_compare['Age_std'] = (df_compare['Age'] - df_compare['Age'].mean()) / df_compare['Age'].std()
-
+    # Multivariable
     cph_multi = CoxPHFitter()
     cph_multi.fit(df_compare[['group4', 'Age_std', 'arm_concurrent', 'time', 'event']],
                   duration_col='time', event_col='event')
@@ -183,11 +239,9 @@ def cox_four_groups(df):
     ci_upper_adj = np.exp(cph_multi.confidence_intervals_.loc['group4', '95% upper-bound'])
     p_value_adj = cph_multi.summary.loc['group4', 'p']
 
-    print(f"  HR = {hr_adj:.2f} (95% CI: {ci_lower_adj:.2f} - {ci_upper_adj:.2f})")
-    print(f"  p-value = {p_value_adj:.4f}")
-
-    print("\n  Full model:")
-    print(cph_multi.summary[['coef', 'exp(coef)', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'p']])
+    print(f"\n  Multivariable (adjusted for age and treatment arm):")
+    print(f"    HR = {hr_adj:.2f} (95% CI: {ci_lower_adj:.2f} - {ci_upper_adj:.2f})")
+    print(f"    p-value = {p_value_adj:.4f}")
 
     results.append({
         'model': 'Multivariable',
@@ -237,20 +291,12 @@ def main():
     print("FOUR-GROUP GDF15 STRATIFICATION ANALYSIS")
     print("=" * 70)
 
-    # Load proteomics data
+    # Load data - survival columns are already in the main CSV
     cosinr = pd.read_csv(DATA_DIR / "regression_ml_inputs.csv")
 
-    # Load survival data from Nature Cancer supplement
-    xls = pd.ExcelFile(DATA_DIR / "43018_2022_467_MOESM2_ESM.xlsx")
-    clinical = pd.read_excel(xls, sheet_name='Supplementary Table 1', header=1)
-
-    # Merge survival data with proteomics
-    clinical_surv = clinical[['Study_ID', 'OS_Months', 'Death_Event']].copy()
-    clinical_surv.columns = ['id', 'OS_time', 'OS_event']
-    cosinr = pd.merge(cosinr, clinical_surv, on='id', how='left')
-
-    time_col = 'OS_time'
-    event_col = 'OS_event'
+    # Use the existing survival columns
+    time_col = 'os_time'
+    event_col = 'event_death'
 
     print(f"Patients with survival data: {cosinr[time_col].notna().sum()}")
 
