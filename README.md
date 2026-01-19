@@ -12,46 +12,6 @@ This repository contains analysis scripts for investigating GDF15 as a biomarker
 - **Treatment**: SBRT alone (no immunotherapy)
 - **Data types**: Blood proteomics (Olink)
 
-## Repository Structure
-
-```
-GDF15_Analysis/
-├── scripts/
-│   ├── 01_data_loading.py           # Load and preprocess all datasets
-│   ├── 02_gdf15_induction.py        # GDF15 induction analysis (paired t-test)
-│   ├── 03_growth_factor_de.py       # Growth factor differential expression
-│   ├── 04_tumor_blood_correlation.py # Tumor-blood GDF15 correlations
-│   ├── 05_survival_analysis.py      # Kaplan-Meier and Cox regression
-│   ├── 06_four_group_stratification.py # 4-group survival stratification
-│   ├── 07_inflammatory_correlations.py # GDF15 vs inflammatory markers
-│   ├── 08_flow_cytometry.py         # Immune cell subset correlations
-│   ├── 09_pathway_analysis.py       # ssGSEA pathway correlations
-│   ├── 10_covariate_analysis.py     # Clinical covariate balance
-│   └── run_all_analyses.py          # Master script to run all analyses
-├── results/                         # Analysis outputs (CSV files)
-└── figures/                         # Generated figures (PNG/PDF)
-```
-
-## Analyses Performed
-
-1. **GDF15 Induction** (Script 02): Paired t-tests comparing pre vs post-SBRT GDF15 levels in both cohorts
-
-2. **Growth Factor Differential Expression** (Script 03): Identify which growth factors are significantly changed after SBRT
-
-3. **Tumor-Blood Correlations** (Script 04): Spearman correlations between tumor GDF15 RNA expression and circulating GDF15
-
-4. **Survival Analysis** (Script 05): Kaplan-Meier curves and Cox regression for GDF15 as prognostic biomarker
-
-5. **4-Group Stratification** (Script 06): Combined baseline level and treatment-induced change analysis
-
-6. **Inflammatory Correlations** (Script 07): GDF15 correlations with cytokines and TNF receptor superfamily proteins
-
-7. **Flow Cytometry** (Script 08): GDF15 correlations with immune cell frequencies
-
-8. **Pathway Analysis** (Script 09): GDF15 correlations with ssGSEA pathway enrichment scores
-
-9. **Covariate Analysis** (Script 10): Clinical covariate balance and confounder identification
-
 ## Requirements
 
 ```
