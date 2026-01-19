@@ -39,20 +39,6 @@ The following data files are required (not included in repository):
 - `hallmark_ssGSEA.csv` - Hallmark pathway enrichment scores
 - `reactome_immune_only_ssGSEA.csv` - Reactome immune pathway scores
 
-## Usage
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run individual scripts
-python scripts/01_data_loading.py
-python scripts/02_gdf15_induction.py
-# ... etc
-
-# Or run all analyses
-python scripts/run_all_analyses.py
-```
 
 ## Statistical Methods
 
